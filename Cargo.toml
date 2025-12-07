@@ -1,0 +1,84 @@
+[package]
+name = "scrcpy-custom"
+version = "0.1.0"
+edition = "2021"
+authors = ["scrcpy-custom contributors"]
+description = "Ultra-low latency screen mirroring application"
+license = "MIT"
+
+[dependencies]
+# Networking
+tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
+futures = "0.3"
+async-trait = "0.1"
+quinn = "0.10"
+rustls = "0.21"
+rcgen = "0.11"
+
+# Video & Audio
+# Choose ONE of these options:
+
+# Option 1: Dynamic linking (requires FFmpeg installed on system)
+# Better performance, hardware acceleration support
+# ffmpeg-next = "6.1"
+
+# Option 2: Static linking (no external dependencies needed)  
+# Slower build, larger binary, but works without FFmpeg installed
+# RECOMMENDED FOR FIRST BUILD ON WINDOWS:
+ffmpeg-next = { version = "6.1", features = ["static"] }
+
+# Rendering (GPU)
+wgpu = "0.19"
+winit = "0.29"
+pollster = "0.3"
+
+# GUI Overlay
+egui = "0.27"
+egui-wgpu = "0.27"
+egui-winit = "0.27"
+
+# Audio Playback
+cpal = "0.15"
+
+# Serialization & Protocol
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.3"
+bytes = "1.5"
+
+# Error Handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Utilities
+crossbeam = "0.8"
+parking_lot = "0.12"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Reed-Solomon for FEC
+reed-solomon-erasure = "6.0"
+
+[dev-dependencies]
+mockall = "0.12"
+criterion = "0.5"
+
+[lib]
+name = "scrcpy_custom"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scrcpy-custom"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+strip = true
+
+[profile.dev]
+opt-level = 1  # Slightly optimize even in dev for better performance during testing

@@ -1,0 +1,41 @@
+# Build artifacts
+/target/
+**/*.rs.bk
+*.pdb
+
+# Cargo
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# FFmpeg
+ffmpeg.exe
+ffprobe.exe
+*.dll
+
+# Logs
+*.log
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test outputs
+/test_output/
+/screenshots/
+
+# Android
+*.apk
+*.aab
+
+assets/

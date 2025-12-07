@@ -1,0 +1,34 @@
+# Example configuration for scrcpy-custom
+# This is a reference - the app currently uses CLI args
+# Future versions may support config files
+
+[connection]
+mode = "tcp"              # tcp or quic
+host = "127.0.0.1"
+port = 5555
+
+[video]
+bitrate = 8               # Mbps
+codec = "h264"            # h264 or h265
+resolution = "1080p"      # 720p, 1080p, 1440p
+hw_accel = true
+hw_decoder = "auto"       # auto, nvdec, qsv, vaapi, none
+
+[audio]
+enabled = true
+sample_rate = 48000
+channels = 2
+codec = "aac"             # aac or opus
+
+[performance]
+adaptive_bitrate = true
+video_buffer_size = 16
+audio_buffer_size = 64
+jitter_buffer_ms = 30
+fec_redundancy = 10       # percentage (0-50)
+
+[display]
+fullscreen = false
+window_width = 1280
+window_height = 720
+show_stats = true
