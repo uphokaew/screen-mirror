@@ -1,53 +1,52 @@
 [package]
 name = "scrcpy-custom"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["scrcpy-custom contributors"]
 description = "Ultra-low latency screen mirroring application"
 license = "MIT"
 
+# ==========================================
+# Common Dependencies (All Platforms)
+# ==========================================
 [dependencies]
 # Networking
 tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
 futures = "0.3"
 async-trait = "0.1"
-quinn = "0.10"
-rustls = "0.21"
-rcgen = "0.11"
+quinn = "0.11.9"
+rcgen = "0.14.5"
 
-# Video & Audio
-# Choose ONE of these options:
+# Use ring provider for rustls to avoid cmake/nasm requirements (Windows friendly)
+rustls = { version = "0.23.35", default-features = false, features = [
+	"logging",
+	"std",
+	"tls12",
+	"ring",
+] }
 
-# Option 1: Dynamic linking (requires FFmpeg installed on system)
-# Better performance, hardware acceleration support
-# ffmpeg-next = "6.1"
-
-# Option 2: Static linking (no external dependencies needed)  
-# Slower build, larger binary, but works without FFmpeg installed
-# RECOMMENDED FOR FIRST BUILD ON WINDOWS:
-ffmpeg-next = { version = "6.1", features = ["static"] }
-
-# Rendering (GPU)
-wgpu = "0.19"
-winit = "0.29"
+# Video & Audio (Common config, logic implemented in platform sections if needed)
+# GPU Rendering
+wgpu = "22.1.0"
+winit = "0.30.5"
 pollster = "0.3"
 
 # GUI Overlay
-egui = "0.27"
-egui-wgpu = "0.27"
-egui-winit = "0.27"
+egui = "0.33.2"
+egui-wgpu = "0.33.2"
+egui-winit = "0.33.2"
 
 # Audio Playback
-cpal = "0.15"
+cpal = "0.16.0"
 
 # Serialization & Protocol
 serde = { version = "1.0", features = ["derive"] }
-bincode = "1.3"
+bincode = "2.0.1"
 bytes = "1.5"
 
 # Error Handling
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2.0.17"
 
 # Utilities
 crossbeam = "0.8"
@@ -61,9 +60,32 @@ clap = { version = "4.4", features = ["derive"] }
 # Reed-Solomon for FEC
 reed-solomon-erasure = "6.0"
 
+# ==========================================
+# Windows Specific Dependencies
+# ==========================================
+[target.'cfg(target_os = "windows")'.dependencies]
+# On Windows, we use dynamic linking with pre-installed FFmpeg (C:\ffmpeg)
+# We disable default features to avoid bindgen trying to generate bindings (requires libclang)
+# Reverting to 6.1 as 7.1/8.0 are incompatible with installed FFmpeg headers
+ffmpeg-next = { version = "6.1", default-features = false, features = [
+	"codec",
+	"format",
+	"software-scaling",
+] }
+
+# ==========================================
+# Linux Specific Dependencies
+# ==========================================
+[target.'cfg(target_os = "linux")'.dependencies]
+# On Linux, standard build works fine (uses pkg-config)
+ffmpeg-next = "6.1"
+
+# ==========================================
+# Dev Dependencies
+# ==========================================
 [dev-dependencies]
-mockall = "0.12"
-criterion = "0.5"
+mockall = "0.14.0"
+criterion = "0.8.0"
 
 [lib]
 name = "scrcpy_custom"
@@ -81,4 +103,4 @@ debug = false
 strip = true
 
 [profile.dev]
-opt-level = 1  # Slightly optimize even in dev for better performance during testing
+opt-level = 1 # Slightly optimize even in dev

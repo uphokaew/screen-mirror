@@ -55,49 +55,52 @@ cargo build --release
 
 ---
 
-## Solution 2: Pre-built FFmpeg Binaries (Faster)
+## Solution 2: Pre-built FFmpeg Binaries (Faster & Recommended)
 
-If you want to skip vcpkg compilation:
+> [!IMPORTANT]
+> **You MUST use FFmpeg 6.0**. Newer versions (7.x) are NOT compatible with the current Rust libraries.
 
-### Step 1: Download FFmpeg Development Files
+### Step 1: Download FFmpeg 6.0
 
-1. Go to https://github.com/BtbN/FFmpeg-Builds/releases
-2. Download: `ffmpeg-n6.0-latest-win64-gpl-shared-6.0.zip`
-3. Extract to `C:\ffmpeg`
+1. Go to [FFmpeg-Builds Releases](https://github.com/GyanD/codexffmpeg/releases) or use direct link:
+   - [ffmpeg-n6.0-latest-win64-gpl-shared-6.0.zip](https://github.com/GyanD/codexffmpeg/releases/download/6.1/ffmpeg-6.1-full_build-shared.7z)
+2. Extract the contents.
+3. Move the extracted files to `C:\ffmpeg` so that `C:\ffmpeg\bin` exists.
 
 ### Step 2: Set environment variables
+
+Run in PowerShell (Admin recommended for permanent setup):
 
 ```powershell
 $env:FFMPEG_DIR = "C:\ffmpeg"
 $env:PATH += ";C:\ffmpeg\bin"
 
-# Permanently (run as admin):
+# Permanently:
 [System.Environment]::SetEnvironmentVariable("FFMPEG_DIR", "C:\ffmpeg", "Machine")
-[System.Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\ffmpeg\bin", "Machine")
 ```
 
-### Step 3: Create pkg-config files manually
+### Step 3: Generate pkg-config files
 
-Create `C:\ffmpeg\lib\pkgconfig\libavcodec.pc`:
-```
-prefix=C:/ffmpeg
-exec_prefix=${prefix}
-libdir=${prefix}/lib
-includedir=${prefix}/include
-
-Name: libavcodec
-Description: FFmpeg codec library
-Version: 6.0
-Libs: -L${libdir} -lavcodec
-Cflags: -I${includedir}
-```
-
-Repeat for: `libavformat.pc`, `libavutil.pc`, `libswscale.pc`, `libavfilter.pc`, `libavdevice.pc`
-
-### Step 4: Install pkg-config for Windows
+We have provided a script to automate this.
 
 ```powershell
-choco install pkgconfiglite
+# Run the setup script
+powershell -ExecutionPolicy Bypass -File scripts/setup_ffmpeg_pc.ps1
+```
+
+### Step 4: Install LLVM (Required for bindgen)
+
+```powershell
+choco install llvm -y
+$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
+```
+
+### Step 5: Build
+
+```powershell
+cargo clean
+cargo build --release
+```
 ```
 
 ### Step 5: Build
