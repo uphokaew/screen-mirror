@@ -23,7 +23,7 @@ impl QuicConnection {
     /// Create a new QUIC connection
     pub async fn new(addr: SocketAddr) -> Result<Self> {
         // Configure QUIC client
-        let mut client_config = ClientConfig::with_native_roots();
+        let mut client_config = ClientConfig::with_platform_verifier();
 
         // Configure transport for low latency
         let mut transport_config = quinn::TransportConfig::default();

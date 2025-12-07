@@ -1,5 +1,6 @@
 # Build artifacts
 /target/
+/bin/
 **/*.rs.bk
 *.pdb
 *.txt

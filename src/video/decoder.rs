@@ -1,7 +1,7 @@
 use anyhow::{Context as AnyhowContext, Result};
 use bytes::Bytes;
-use ffmpeg::codec::decoder::Video as VideoDecoder;
 use ffmpeg::codec::Context;
+use ffmpeg::codec::decoder::Video as VideoDecoder;
 use ffmpeg::format::Pixel;
 use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
 use ffmpeg::util::frame::video::Video as VideoFrame;
@@ -116,12 +116,11 @@ impl HardwareVideoDecoder {
     /// Try to create a hardware decoder
     fn try_hw_decoder(codec_names: &[&str]) -> Result<VideoDecoder> {
         for codec_name in codec_names {
-            if let Ok(codec) = ffmpeg::codec::decoder::find_by_name(codec_name) {
-                if let Ok(context) = Context::new() {
-                    if let Ok(decoder) = context.decoder().video() {
-                        tracing::info!("Using hardware decoder: {}", codec_name);
-                        return Ok(decoder);
-                    }
+            if let Some(codec) = ffmpeg::codec::decoder::find_by_name(codec_name) {
+                let context = Context::new();
+                if let Ok(decoder) = context.decoder().video() {
+                    tracing::info!("Using hardware decoder: {}", codec_name);
+                    return Ok(decoder);
                 }
             }
         }
@@ -131,21 +130,19 @@ impl HardwareVideoDecoder {
     /// Create software decoder (fallback)
     fn create_software_decoder() -> Result<VideoDecoder> {
         // Try H.264 first, then H.265
-        if let Ok(codec) = ffmpeg::codec::decoder::find_by_name("h264") {
-            if let Ok(context) = Context::new() {
-                if let Ok(decoder) = context.decoder().video() {
-                    tracing::info!("Using software H.264 decoder");
-                    return Ok(decoder);
-                }
+        if let Some(codec) = ffmpeg::codec::decoder::find_by_name("h264") {
+            let context = Context::new();
+            if let Ok(decoder) = context.decoder().video() {
+                tracing::info!("Using software H.264 decoder");
+                return Ok(decoder);
             }
         }
 
-        if let Ok(codec) = ffmpeg::codec::decoder::find_by_name("hevc") {
-            if let Ok(context) = Context::new() {
-                if let Ok(decoder) = context.decoder().video() {
-                    tracing::info!("Using software H.265 decoder");
-                    return Ok(decoder);
-                }
+        if let Some(codec) = ffmpeg::codec::decoder::find_by_name("hevc") {
+            let context = Context::new();
+            if let Ok(decoder) = context.decoder().video() {
+                tracing::info!("Using software H.265 decoder");
+                return Ok(decoder);
             }
         }
 

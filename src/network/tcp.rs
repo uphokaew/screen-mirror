@@ -55,6 +55,7 @@ impl TcpConnection {
                     NetworkError::Io(e)
                 }
             })
+            .map(|_| ())
     }
 
     /// Measure RTT by sending a ping control message

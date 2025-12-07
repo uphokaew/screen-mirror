@@ -1,6 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
-use scrcpy_custom::{config::*, control::BitrateController, network::*};
+use scrcpy_custom::{
+    config::{Config, ConnectionMode},
+    control::BitrateController,
+    network::*,
+};
 use std::net::{IpAddr, SocketAddr};
 use tracing::{error, info};
 use tracing_subscriber;

@@ -1,25 +1,25 @@
 use crate::video::decoder::{DecodedFrame, PixelFormat};
 use anyhow::{Context, Result};
 use wgpu::{
-    util::DeviceExt, Adapter, Backends, Device, DeviceDescriptor, Features, Instance, Limits,
-    PowerPreference, Queue, RequestAdapterOptions, Surface, SurfaceConfiguration, TextureFormat,
-    TextureUsages, TextureView,
+    Adapter, Backends, Device, DeviceDescriptor, Features, Instance, Limits, PowerPreference,
+    Queue, RequestAdapterOptions, Surface, SurfaceConfiguration, TextureFormat, TextureUsages,
+    TextureView, util::DeviceExt,
 };
 use winit::{
     dpi::PhysicalSize,
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
-    window::{Window, WindowBuilder},
+    window::Window,
 };
 
 /// GPU-accelerated video renderer using wgpu
-pub struct VideoRenderer {
+pub struct VideoRenderer<'a> {
     instance: Instance,
-    surface: Surface,
+    surface: Surface<'a>,
     device: Device,
     queue: Queue,
     config: SurfaceConfiguration,
-    window: Window,
+    window: &'a Window,
     render_pipeline: wgpu::RenderPipeline,
     texture: Option<wgpu::Texture>,
     texture_bind_group: Option<wgpu::BindGroup>,
@@ -29,16 +29,9 @@ pub struct VideoRenderer {
     current_height: u32,
 }
 
-impl VideoRenderer {
+impl<'a> VideoRenderer<'a> {
     /// Create a new video renderer
-    pub fn new(event_loop: &EventLoop<()>) -> Result<Self> {
-        // Create window
-        let window = WindowBuilder::new()
-            .with_title("scrcpy-custom")
-            .with_inner_size(PhysicalSize::new(1280, 720))
-            .build(event_loop)
-            .context("Failed to create window")?;
-
+    pub fn new(window: &'a Window) -> Result<Self> {
         // Create wgpu instance
         let instance = Instance::new(wgpu::InstanceDescriptor {
             backends: Backends::all(),
@@ -46,8 +39,9 @@ impl VideoRenderer {
         });
 
         // Create surface
-        let surface =
-            unsafe { instance.create_surface(&window) }.context("Failed to create surface")?;
+        let surface = instance
+            .create_surface(window)
+            .context("Failed to create surface")?;
 
         // Request adapter
         let adapter = pollster::block_on(instance.request_adapter(&RequestAdapterOptions {
@@ -63,8 +57,9 @@ impl VideoRenderer {
         let (device, queue) = pollster::block_on(adapter.request_device(
             &DeviceDescriptor {
                 label: Some("Main Device"),
-                features: Features::empty(),
-                limits: Limits::default(),
+                required_features: Features::empty(),
+                required_limits: Limits::default(),
+                memory_hints: Default::default(),
             },
             None,
         ))
@@ -88,6 +83,7 @@ impl VideoRenderer {
             present_mode: wgpu::PresentMode::Fifo, // VSync for now
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
+            desired_maximum_frame_latency: 2,
         };
 
         surface.configure(&device, &config);
@@ -172,6 +168,7 @@ impl VideoRenderer {
                 module: &shader,
                 entry_point: "vs_main",
                 buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
@@ -181,6 +178,7 @@ impl VideoRenderer {
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -198,6 +196,7 @@ impl VideoRenderer {
                 alpha_to_coverage_enabled: false,
             },
             multiview: None,
+            cache: None,
         });
 
         Ok(pipeline)
