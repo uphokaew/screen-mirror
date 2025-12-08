@@ -109,7 +109,7 @@ impl ConnectionNegotiator {
 
         let conn = tokio::time::timeout(
             std::time::Duration::from_millis(self.timeout_ms),
-            QuicConnection::connect(addr),
+            QuicConnection::connect(addr, false),
         )
         .await
         .context("QUIC connection timeout")?
@@ -122,7 +122,7 @@ impl ConnectionNegotiator {
     async fn try_tcp(&self) -> Result<TcpConnection> {
         let conn = tokio::time::timeout(
             std::time::Duration::from_millis(self.timeout_ms),
-            TcpConnection::connect(self.tcp_addr),
+            TcpConnection::connect(self.tcp_addr, false),
         )
         .await
         .context("TCP connection timeout")?

@@ -56,7 +56,8 @@ OPTIONS:
 - **USB (TCP)**: < 50ms latency
 - **WiFi (QUIC)**: < 100ms latency with FEC
 - **Throughput**: 2-20 Mbps adaptive
-- **Resolution**: 720p-1080p streaming, GPU upscaling
+- **Throughput**: 2-20 Mbps adaptive
+- **Resolution**: 720p (Default) - 1080p streaming, GPU upscaling
 
 ## Platform Support
 
@@ -81,17 +82,15 @@ See [TESTING.md](TESTING.md) for comprehensive testing guide.
 
 ## Development Status
 
-## Development Status
-
 **Completed**: 
 - ✅ Core TCP Networking (USB)
 - ✅ Hardware Video Decoding (NVDEC/QSV/D3D11VA)
-- ✅ GPU Rendering (wgpu)
+- ✅ GPU Rendering (wgpu) with Auto-Resize
 - ✅ Protocol Compatibility with official scrcpy-server (v1.22+)
-- ✅ Stream Alignment & Error Recovery
+- ✅ Audio Support (Dual-socket connection)
+- ✅ Safe Shutdown & Robust Rotation
 
 **Work in Progress**:
-- 🚧 Audio Support (Currently disabled for stability)
 - 🚧 QUIC/WiFi Mode (Experimental)
 
 ## Using scrcpy's ADB

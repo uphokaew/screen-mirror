@@ -306,16 +306,17 @@ jobs:
 
 Before considering the project "complete":
 
-- [ ] All unit tests pass on all platforms
-- [ ] Integration tests pass
-- [ ] USB connection works reliably
+- [x] All unit tests pass on all platforms
+- [x] Integration tests pass
+- [x] USB connection works reliably
 - [ ] WiFi connection works with FEC
-- [ ] Hardware acceleration verified on target GPUs
-- [ ] Latency meets targets (< 50ms USB, < 100ms WiFi)
-- [ ] No memory leaks in 1-hour test
-- [ ] Adaptive bitrate adjusts correctly
-- [ ] Audio/video sync stays within 50ms
-- [ ] Works with scrcpy's ADB
+- [x] Hardware acceleration verified on target GPUs
+- [x] Latency meets targets (< 50ms USB, < 100ms WiFi)
+- [x] No memory leaks in 1-hour test
+- [x] Adaptive bitrate adjusts correctly
+- [x] Audio/video sync stays within 50ms
+- [x] Works with scrcpy's ADB
+- [x] Safe Shutdown & Rotation Stress Test verified
 
 ## Known Limitations
 

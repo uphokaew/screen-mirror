@@ -49,7 +49,7 @@ pub enum ConnectionMode {
 #[async_trait]
 pub trait Connection: Send + Sync {
     /// Connect to the server
-    async fn connect(addr: SocketAddr) -> Result<Self>
+    async fn connect(addr: SocketAddr, enable_audio: bool) -> Result<Self>
     where
         Self: Sized;
 

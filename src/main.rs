@@ -83,14 +83,50 @@ fn main() -> Result<()> {
         )
         .init();
 
-    let args = Args::parse();
-    let args_clone = args.clone();
+    // Interactive Mode Selection if no arguments provided
+    // This allows the user to choose between Wired (USB) and Wireless without typing commands
+    let mut args = Args::parse();
+
+    if std::env::args().len() <= 1 {
+        println!("========================================");
+        println!("      Scrcpy-Custom Mode Selection      ");
+        println!("========================================");
+        println!("1. Wired Connection (USB) [Default]");
+        println!("2. Wireless Connection (TCP/WiFi)");
+        println!("========================================");
+        println!("Enter choice (1/2): ");
+
+        let mut input = String::new();
+        if std::io::stdin().read_line(&mut input).is_ok() {
+            match input.trim() {
+                "2" => {
+                    args.mode = ConnectionModeArg::Tcp; // Currently both use TCP, but this might imply IP input later
+                    // Ideally for wireless we might want to ask for IP
+                    println!("Enter Device IP (e.g. 192.168.1.100): ");
+                    let mut ip_input = String::new();
+                    if std::io::stdin().read_line(&mut ip_input).is_ok() {
+                        if let Ok(ip) = ip_input.trim().parse::<IpAddr>() {
+                            args.host = ip;
+                        } else {
+                            println!("Invalid IP. Using default.");
+                        }
+                    }
+                }
+                _ => {
+                    println!("Selected: Wired Connection (USB)");
+                    // Default args.mode is already TCP (USB tunnel)
+                }
+            }
+        }
+    }
 
     info!("Starting scrcpy-custom");
     info!(
         "Mode: {:?}, Host: {}, Port: {}",
         args.mode, args.host, args.port
     );
+
+    let args_clone = args.clone();
 
     // Setup Winit Event Loop
     let event_loop = EventLoop::new().unwrap();
@@ -134,7 +170,24 @@ fn main() -> Result<()> {
             config.video.max_size = args_clone.max_size;
             config.performance.adaptive_bitrate = false; // Forced false as no control socket
 
-            config.audio.enabled = !args_clone.no_audio;
+            if args_clone.no_audio {
+                config.audio.enabled = false;
+            } else {
+                config.audio.enabled = true;
+                // Smart Codec Negotiation
+                // Try to initialize Opus decoder. If it fails, fallback to AAC.
+                // We do this check BEFORE connecting/starting server so we can tell the server what to send.
+                if HardwareAudioDecoder::new("opus", 48000, 2).is_ok() {
+                    info!("Client supports Opus audio. Requesting Opus from server.");
+                    config.audio.codec = scrcpy_custom::config::AudioCodec::Opus;
+                } else if HardwareAudioDecoder::new("aac", 48000, 2).is_ok() {
+                    warn!("Client does not support Opus. Requesting AAC from server.");
+                    config.audio.codec = scrcpy_custom::config::AudioCodec::Aac;
+                } else {
+                    warn!("No supported audio decoder found (Opus/AAC). Disabling audio.");
+                    config.audio.enabled = false;
+                }
+            }
 
             if let Err(e) = run_app(config, frame_tx, running_clone).await {
                 error!("Application error: {}", e);
@@ -242,7 +295,7 @@ async fn run_app(
     info!("Checking matching scrcpy-server via ADB...");
     let mut adb_success = false;
 
-    match scrcpy_custom::server::ServerManager::new() {
+    match scrcpy_custom::server::ServerManager::new().await {
         Ok(mut manager) => {
             let serial = if !config.connection.host.is_loopback() {
                 Some(config.connection.host.to_string())
@@ -250,7 +303,7 @@ async fn run_app(
                 None
             };
 
-            if let Err(e) = manager.start_server(&config, serial.as_deref()) {
+            if let Err(e) = manager.start_server(&config, serial.as_deref()).await {
                 warn!("ADB Server setup failed: {}.", e);
             } else {
                 info!("Server setup successful via ADB!");
@@ -304,7 +357,7 @@ async fn run_with_connection<C: Connection>(
     running: Arc<AtomicBool>,
 ) -> Result<()> {
     // Connect to server
-    let mut connection = C::connect(addr).await.map_err(|e| {
+    let mut connection = C::connect(addr, config.audio.enabled).await.map_err(|e| {
         handle_connection_error(&anyhow::anyhow!(e.to_string()));
         anyhow::anyhow!("Failed to connect: {}", e)
     })?;
@@ -325,7 +378,7 @@ async fn run_with_connection<C: Connection>(
     });
 
     let mut audio_player = if audio_decoder.is_ok() {
-        match AudioPlayer::new(48000, 2, 50) {
+        match AudioPlayer::new(48000, 2, config.performance.jitter_buffer_ms) {
             // 50ms jitter buffer
             Ok(player) => Some(player),
             Err(e) => {

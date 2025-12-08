@@ -4,10 +4,11 @@
 
 ### ✅ Rust Client (PC) - สมบูรณ์
 - **Core Networking**: TCP (USB) รองรับ official Protocol
-- **Video Pipeline**: Hardware decoding (NVDEC/QSV/D3D11VA) + wgpu rendering + Auto-alignment
+- **Video Pipeline**: Hardware decoding (NVDEC/QSV/D3D11VA) + wgpu rendering + Auto-alignment + Robust Rotation
 - **Synchronization**: PTS-based A/V sync engine
 - **Cross-Platform**: Windows, Linux, macOS
-- **Audio Pipeline**: *Disabled (Stability)* - โครงสร้างรองรับแล้ว รอเปิดใช้งาน
+- **Audio Pipeline**: ✅ Enabled (Dual Socket) - เสียงออกลำโพง PC พร้อมภาพ
+- **System Stability**: ✅ Graceful Shutdown & Safe Resize
 
 ### ✅ Android Server - Integration Complete
 - **Integration**: ใช้ Official `scrcpy-server` (เสถียรที่สุด)

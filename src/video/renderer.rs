@@ -70,12 +70,28 @@ impl<'a> VideoRenderer<'a> {
             .copied()
             .unwrap_or(surface_caps.formats[0]);
 
+        // Select best available PresentMode
+        // Priority: Mailbox (Fast, No Tear) > Immediate (Fastest, Tearing) > Fifo (VSync)
+        let present_mode = if surface_caps
+            .present_modes
+            .contains(&wgpu::PresentMode::Mailbox)
+        {
+            wgpu::PresentMode::Mailbox
+        } else if surface_caps
+            .present_modes
+            .contains(&wgpu::PresentMode::Immediate)
+        {
+            wgpu::PresentMode::Immediate
+        } else {
+            wgpu::PresentMode::Fifo
+        };
+
         let config = SurfaceConfiguration {
             usage: TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo, // VSync for now
+            present_mode,
             alpha_mode: surface_caps.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,

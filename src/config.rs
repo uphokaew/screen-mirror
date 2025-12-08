@@ -109,6 +109,17 @@ pub struct AudioConfig {
 pub enum AudioCodec {
     Aac,
     Opus,
+    Raw,
+}
+
+impl AudioCodec {
+    pub fn to_server_arg(&self) -> &'static str {
+        match self {
+            AudioCodec::Aac => "aac",
+            AudioCodec::Opus => "opus",
+            AudioCodec::Raw => "raw",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,14 +160,14 @@ impl Default for Config {
                 enabled: true,
                 sample_rate: 48000,
                 channels: 2,
-                codec: AudioCodec::Aac,
+                codec: AudioCodec::Opus,
             },
             performance: PerformanceConfig {
-                video_buffer_size: 16,
-                audio_buffer_size: 64,
-                jitter_buffer_ms: 30,
-                adaptive_bitrate: true,
-                fec_redundancy: 10,
+                video_buffer_size: 1,    // Practically no buffering
+                audio_buffer_size: 16,   // Minimize audio latency
+                jitter_buffer_ms: 10,    // USB is stable, minimal jitter
+                adaptive_bitrate: false, // Stable connection doesn't need adaptive
+                fec_redundancy: 0,       // No packet loss on USB
             },
         }
     }

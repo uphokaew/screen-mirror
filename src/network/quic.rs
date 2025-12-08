@@ -152,7 +152,7 @@ impl QuicConnection {
 
 #[async_trait]
 impl Connection for QuicConnection {
-    async fn connect(addr: SocketAddr) -> Result<Self> {
+    async fn connect(addr: SocketAddr, _enable_audio: bool) -> Result<Self> {
         Self::new(addr).await
     }
 

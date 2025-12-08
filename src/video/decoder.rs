@@ -105,6 +105,7 @@ impl HardwareVideoDecoder {
                 // Try hardware decoders in order of preference
                 // Prefer platform-agnostic or native (D3D11VA/QSV) before vendor-specific (CUVID)
                 Self::try_hw_decoder(&["h264_d3d11va", "hevc_d3d11va"])
+                    .or_else(|_| Self::try_hw_decoder(&["h264_dxva2", "hevc_dxva2"]))
                     .or_else(|_| Self::try_hw_decoder(&["h264_qsv", "hevc_qsv"]))
                     .or_else(|_| Self::try_hw_decoder(&["h264_cuvid", "hevc_cuvid"]))
                     .or_else(|_| Self::try_hw_decoder(&["h264_vaapi", "hevc_vaapi"]))
@@ -171,15 +172,45 @@ impl HardwareVideoDecoder {
         let mut packet = ffmpeg::codec::packet::Packet::copy(&self.packet_buffer);
         packet.set_pts(Some(pts));
 
-        // Send packet to decoder
-        match self.decoder.send_packet(&packet) {
+        // Try to decode. If it fails, and we are using hardware, fallback to software!
+        // This is crucial for stability with QSV or other picky HW decoders.
+        match self.send_packet_internal(&packet) {
             Ok(_) => {}
-            Err(ffmpeg::Error::Other { errno: 11 }) => {
-                // EAGAIN: Input buffer full. We should continue to receive frames.
-                // In a proper loop we would flush, but here we just proceed to try receiving.
-                tracing::warn!("Decoder input full (EAGAIN), trying to receive frames...");
+            Err(e) => {
+                // Check if we can fallback (heuristic: if error is not EAGAIN)
+                tracing::warn!(
+                    "Hardware decoding failed: {}. Attempting software fallback...",
+                    e
+                );
+
+                // Re-create as software decoder
+                match Self::create_software_decoder() {
+                    Ok(mut sw_decoder) => {
+                        // Send the same packet to the new decoder
+                        match sw_decoder.send_packet(&packet) {
+                            Ok(_) => {
+                                tracing::info!(
+                                    "Software fallback successful! Switched to Software Decoder."
+                                );
+                                self.decoder = sw_decoder;
+                            }
+                            Err(sw_e) => {
+                                return Err(anyhow::anyhow!(
+                                    "Both Hardware and Software decoding failed. HW: {}, SW: {}",
+                                    e,
+                                    sw_e
+                                ));
+                            }
+                        }
+                    }
+                    Err(create_e) => {
+                        return Err(anyhow::anyhow!(
+                            "Decoding failed and could not create software fallback: {}",
+                            create_e
+                        ));
+                    }
+                }
             }
-            Err(e) => return Err(anyhow::anyhow!("Failed to send packet to decoder: {:?}", e)),
         }
 
         // Clear packet buffer after successful send (or EAGAIN which implies we should wait/read)
@@ -198,6 +229,18 @@ impl HardwareVideoDecoder {
                 Ok(None)
             }
             Err(e) => Err(anyhow::anyhow!("Decoder error: {:?}", e)),
+        }
+    }
+
+    // Helper to keep logic clean
+    fn send_packet_internal(&mut self, packet: &ffmpeg::codec::packet::Packet) -> Result<()> {
+        match self.decoder.send_packet(packet) {
+            Ok(_) => Ok(()),
+            Err(ffmpeg::Error::Other { errno: 11 }) => {
+                // EAGAIN is not an error, just full buffer
+                Ok(())
+            }
+            Err(e) => Err(anyhow::anyhow!("{:?}", e)), // Propagate real errors
         }
     }
 
