@@ -29,7 +29,7 @@ rustls = { version = "0.23.35", default-features = false, features = [
 # Video & Audio (Common config, logic implemented in platform sections if needed)
 # GPU Rendering
 wgpu = "22.1.0"
-winit = "0.30.5"
+winit = { version = "0.30.5", features = ["rwh_06", "x11", "wayland"] }
 pollster = "0.3"
 
 # GUI Overlay
