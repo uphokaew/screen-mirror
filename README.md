@@ -81,8 +81,18 @@ See [TESTING.md](TESTING.md) for comprehensive testing guide.
 
 ## Development Status
 
-**Completed**: Core networking, HW video decoding, GPU rendering, audio pipeline, A/V sync, FEC, adaptive bitrate  
-**Pending**: Android server implementation
+## Development Status
+
+**Completed**: 
+- ✅ Core TCP Networking (USB)
+- ✅ Hardware Video Decoding (NVDEC/QSV/D3D11VA)
+- ✅ GPU Rendering (wgpu)
+- ✅ Protocol Compatibility with official scrcpy-server (v1.22+)
+- ✅ Stream Alignment & Error Recovery
+
+**Work in Progress**:
+- 🚧 Audio Support (Currently disabled for stability)
+- 🚧 QUIC/WiFi Mode (Experimental)
 
 ## Using scrcpy's ADB
 
@@ -103,7 +113,6 @@ sudo ln -s /opt/scrcpy/adb /usr/local/bin/adb
 - **[HOTSPOT_MODE_TH.md](HOTSPOT_MODE_TH.md)** - 🔥 การใช้ Android เป็น WiFi Hotspot (แนะนำ!)
 - **[INSTALL_CROSSPLATFORM.md](INSTALL_CROSSPLATFORM.md)** - Cross-platform installation
 - **[TESTING.md](TESTING.md)** - Testing and verification guide
-- **[ANDROID_SERVER.md](ANDROID_SERVER.md)** - Android server implementation guide
 - **[FFMPEG_BUILD_ISSUES.md](FFMPEG_BUILD_ISSUES.md)** - FFmpeg build troubleshooting
 - **[config.example.toml](config.example.toml)** - Example configuration
 

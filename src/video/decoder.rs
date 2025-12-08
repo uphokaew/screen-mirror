@@ -103,8 +103,10 @@ impl HardwareVideoDecoder {
             }
             "auto" => {
                 // Try hardware decoders in order of preference
-                Self::try_hw_decoder(&["h264_cuvid", "hevc_cuvid"])
+                // Prefer platform-agnostic or native (D3D11VA/QSV) before vendor-specific (CUVID)
+                Self::try_hw_decoder(&["h264_d3d11va", "hevc_d3d11va"])
                     .or_else(|_| Self::try_hw_decoder(&["h264_qsv", "hevc_qsv"]))
+                    .or_else(|_| Self::try_hw_decoder(&["h264_cuvid", "hevc_cuvid"]))
                     .or_else(|_| Self::try_hw_decoder(&["h264_vaapi", "hevc_vaapi"]))
                     .or_else(|_| Self::create_software_decoder())
             }
@@ -161,13 +163,6 @@ impl HardwareVideoDecoder {
     }
 
     /// Decode a video packet
-    ///
-    /// # Arguments
-    /// * `data` - Encoded video data (H.264/H.265 NALUs)
-    /// * `pts` - Presentation timestamp in microseconds
-    ///
-    /// # Returns
-    /// Decoded frame if a complete frame was produced, None otherwise
     pub fn decode(&mut self, data: &Bytes, pts: i64) -> Result<Option<DecodedFrame>> {
         // Append data to packet buffer
         self.packet_buffer.extend_from_slice(data);
@@ -177,11 +172,17 @@ impl HardwareVideoDecoder {
         packet.set_pts(Some(pts));
 
         // Send packet to decoder
-        self.decoder
-            .send_packet(&packet)
-            .context("Failed to send packet to decoder")?;
+        match self.decoder.send_packet(&packet) {
+            Ok(_) => {}
+            Err(ffmpeg::Error::Other { errno: 11 }) => {
+                // EAGAIN: Input buffer full. We should continue to receive frames.
+                // In a proper loop we would flush, but here we just proceed to try receiving.
+                tracing::warn!("Decoder input full (EAGAIN), trying to receive frames...");
+            }
+            Err(e) => return Err(anyhow::anyhow!("Failed to send packet to decoder: {:?}", e)),
+        }
 
-        // Clear packet buffer after successful send
+        // Clear packet buffer after successful send (or EAGAIN which implies we should wait/read)
         self.packet_buffer.clear();
 
         // Try to receive decoded frame

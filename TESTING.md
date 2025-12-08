@@ -319,7 +319,6 @@ Before considering the project "complete":
 
 ## Known Limitations
 
-- ⚠️ Requires Android server (not yet implemented)
 - ⚠️ macOS hardware decoding via FFmpeg only (not native VideoToolbox)
 - ⚠️ QUIC certificate validation is basic (self-signed for dev)
 
@@ -341,4 +340,4 @@ RUST_LOG=debug cargo run --release -- --mode tcp > debug.log 2>&1
 ---
 
 **Test Status**: ✅ All automated tests implemented and passing  
-**Manual Tests**: ⏳ Pending Android server implementation
+**Manual Tests**: ✅ Official Server Verified
