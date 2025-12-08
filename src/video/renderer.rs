@@ -197,8 +197,22 @@ impl<'a> VideoRenderer<'a> {
         Ok(pipeline)
     }
 
+    /// Get current known video size
+    pub fn current_video_size(&self) -> Option<(u32, u32)> {
+        if self.current_width > 0 && self.current_height > 0 {
+            Some((self.current_width, self.current_height))
+        } else {
+            None
+        }
+    }
+
     /// Render a decoded frame to the window
     pub fn render(&mut self, frame: &DecodedFrame) -> Result<()> {
+        // Skip if window is minimized (0 size) to avoid swapchain errors
+        if self.config.width == 0 || self.config.height == 0 {
+            return Ok(());
+        }
+
         // Update texture if frame size changed
         if frame.width != self.current_width || frame.height != self.current_height {
             self.update_texture(frame.width, frame.height)?;
@@ -360,10 +374,22 @@ impl<'a> VideoRenderer<'a> {
 
     /// Render texture to screen with upscaling
     fn render_to_screen(&mut self) -> Result<()> {
-        let output = self
-            .surface
-            .get_current_texture()
-            .context("Failed to get current texture")?;
+        let output = match self.surface.get_current_texture() {
+            Ok(output) => output,
+            Err(wgpu::SurfaceError::Lost) => {
+                tracing::warn!("Surface lost, reconfiguring...");
+                self.reconfigure();
+                return Ok(());
+            }
+            Err(wgpu::SurfaceError::OutOfMemory) => {
+                return Err(anyhow::anyhow!("Surface out of memory"));
+            }
+            // All other errors (Outdated, Timeout) should be resolved by the next frame
+            Err(e) => {
+                tracing::warn!("Skipping frame due to surface error: {:?}", e);
+                return Ok(());
+            }
+        };
 
         let view = output
             .texture
@@ -397,6 +423,31 @@ impl<'a> VideoRenderer<'a> {
                 render_pass.set_bind_group(0, bind_group, &[]);
             }
 
+            // Calculate Letterboxing (Fit inside window maintaining aspect ratio)
+            if self.current_width > 0 && self.current_height > 0 {
+                let win_w = self.config.width as f32;
+                let win_h = self.config.height as f32;
+                let vid_w = self.current_width as f32;
+                let vid_h = self.current_height as f32;
+
+                let win_aspect = win_w / win_h;
+                let vid_aspect = vid_w / vid_h;
+
+                let (viewport_w, viewport_h, x, y) = if vid_aspect > win_aspect {
+                    // Video is wider than window: Fit width, adjust height (bars top/bottom)
+                    let scale = win_w / vid_w;
+                    let h = vid_h * scale;
+                    (win_w, h, 0.0, (win_h - h) / 2.0)
+                } else {
+                    // Video is taller than window: Fit height, adjust width (bars left/right)
+                    let scale = win_h / vid_h;
+                    let w = vid_w * scale;
+                    (w, win_h, (win_w - w) / 2.0, 0.0)
+                };
+
+                render_pass.set_viewport(x, y, viewport_w, viewport_h, 0.0, 1.0);
+            }
+
             render_pass.draw(0..4, 0..1); // Full-screen quad
         }
 
@@ -404,6 +455,11 @@ impl<'a> VideoRenderer<'a> {
         output.present();
 
         Ok(())
+    }
+
+    /// Reconfigure surface (e.g. on resize or lost)
+    fn reconfigure(&mut self) {
+        self.surface.configure(&self.device, &self.config);
     }
 
     /// Handle window resize

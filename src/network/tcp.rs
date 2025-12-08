@@ -36,11 +36,11 @@ impl TcpConnection {
         })
     }
 
-    /// Read exact number of bytes from stream with timeout
+    /// Read exact number of bytes from stream (blocking indefinitely)
     async fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
-        timeout(Self::READ_TIMEOUT, self.stream.read_exact(buf))
+        self.stream
+            .read_exact(buf)
             .await
-            .map_err(|_| NetworkError::Timeout)?
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::UnexpectedEof {
                     NetworkError::ConnectionClosed
@@ -49,6 +49,13 @@ impl TcpConnection {
                 }
             })
             .map(|_| ())
+    }
+
+    /// Read exact number of bytes with timeout (for handshake)
+    async fn read_exact_timeout(&mut self, buf: &mut [u8]) -> Result<()> {
+        timeout(Self::READ_TIMEOUT, self.read_exact(buf))
+            .await
+            .map_err(|_| NetworkError::Timeout)?
     }
 }
 
@@ -59,18 +66,18 @@ impl Connection for TcpConnection {
 
         // Handshake: Read device name (64 bytes)
         let mut device_name = [0u8; 64];
-        connection.read_exact(&mut device_name).await?;
+        connection.read_exact_timeout(&mut device_name).await?;
         let name = String::from_utf8_lossy(&device_name);
         tracing::info!("Connected to device: {}", name.trim_matches(char::from(0)));
 
         // Consume 1 dummy byte? (Observed 0x00 before CodecID)
         let mut dummy = [0u8; 1];
-        connection.read_exact(&mut dummy).await?;
+        connection.read_exact_timeout(&mut dummy).await?;
         tracing::info!("Consuming dummy byte: 0x{:02X}", dummy[0]);
 
         // Scrcpy Video Stream Header: CodecID (4) + Width (4) + Height (4) = 12 bytes
         let mut meta = [0u8; 12];
-        connection.read_exact(&mut meta).await?;
+        connection.read_exact_timeout(&mut meta).await?;
         let codec_id = u32::from_be_bytes(meta[0..4].try_into().unwrap());
         let width = u32::from_be_bytes(meta[4..8].try_into().unwrap());
         let height = u32::from_be_bytes(meta[8..12].try_into().unwrap());
