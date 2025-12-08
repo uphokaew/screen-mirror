@@ -14,6 +14,7 @@ pub struct FecEncoder {
     parity_shards: usize,
     current_block_id: u32,
     block_buffer: Vec<Packet>,
+    #[allow(dead_code)]
     max_packet_size: usize,
 }
 
@@ -131,6 +132,7 @@ pub struct FecDecoder {
 }
 
 struct FecBlock {
+    #[allow(dead_code)]
     block_id: u32,
     data_shards: Vec<Option<Vec<u8>>>,
     parity_shards: Vec<Option<Vec<u8>>>,
@@ -274,13 +276,13 @@ impl FecDecoder {
         // Extract recovered packets
         let mut recovered_packets = Vec::new();
         for (i, shard) in shards.iter().take(block.data_count as usize).enumerate() {
-            if block.data_shards[i].is_none() {
-                if let Some(data) = shard {
-                    // Parse recovered packet
-                    if let Ok(packet) = Packet::from_bytes(Bytes::from(data.clone())) {
-                        recovered_packets.push(packet);
-                        tracing::info!("Recovered packet {} in block {}", i, block_id);
-                    }
+            if block.data_shards[i].is_none()
+                && let Some(data) = shard
+            {
+                // Parse recovered packet
+                if let Ok(packet) = Packet::from_bytes(Bytes::from(data.clone())) {
+                    recovered_packets.push(packet);
+                    tracing::info!("Recovered packet {} in block {}", i, block_id);
                 }
             }
         }
@@ -322,7 +324,7 @@ mod tests {
             packets.push(Packet::new(
                 PacketType::Video,
                 i * 1000,
-                i,
+                i as u32,
                 Bytes::from(vec![i as u8; 100]),
             ));
         }

@@ -3,7 +3,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 
-use super::{Connection, NetworkError, QuicConnection, TcpConnection};
+use super::{Connection, QuicConnection, TcpConnection};
 
 /// Device capabilities exchanged during handshake
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -134,11 +134,11 @@ impl ConnectionNegotiator {
     /// Exchange capabilities with server
     pub async fn exchange_capabilities<C: Connection>(
         &self,
-        conn: &mut C,
+        _conn: &mut C,
         client_caps: &DeviceCapabilities,
     ) -> Result<DeviceCapabilities> {
         // Send client capabilities
-        let caps_data =
+        let _caps_data =
             bincode::serialize(client_caps).context("Failed to serialize capabilities")?;
 
         // TODO: Send/receive capabilities via control channel

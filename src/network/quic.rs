@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 /// QUIC connection for wireless (WiFi) connectivity
 pub struct QuicConnection {
     connection: quinn::Connection,
+    #[allow(dead_code)]
     recv_stream: Arc<Mutex<Option<RecvStream>>>,
     send_stream: Arc<Mutex<Option<SendStream>>>,
     stats: NetworkStats,
@@ -23,7 +24,8 @@ impl QuicConnection {
     /// Create a new QUIC connection
     pub async fn new(addr: SocketAddr) -> Result<Self> {
         // Configure QUIC client
-        let mut client_config = ClientConfig::with_platform_verifier();
+        let mut client_config = ClientConfig::try_with_platform_verifier()
+            .map_err(|e| NetworkError::Quic(e.to_string()))?;
 
         // Configure transport for low latency
         let mut transport_config = quinn::TransportConfig::default();
@@ -81,6 +83,7 @@ impl QuicConnection {
     }
 
     /// Receive data via reliable stream (for control messages)
+    #[allow(dead_code)]
     async fn recv_stream_data(&self, buf: &mut [u8]) -> Result<usize> {
         let mut stream_lock = self.recv_stream.lock().await;
 
@@ -214,16 +217,21 @@ impl Connection for QuicConnection {
 /// FEC (Forward Error Correction) decoder using Reed-Solomon
 /// Allows recovery of lost packets without retransmission
 struct FecDecoder {
+    #[allow(dead_code)]
     redundancy_percent: u8,
     blocks: HashMap<u32, FecBlock>,
     last_cleanup: Instant,
 }
 
 struct FecBlock {
+    #[allow(dead_code)]
     block_id: u32,
+    #[allow(dead_code)]
     data_packets: HashMap<u8, Bytes>,
     parity_packets: HashMap<u8, Bytes>,
+    #[allow(dead_code)]
     data_count: u8,
+    #[allow(dead_code)]
     parity_count: u8,
     created_at: Instant,
 }
@@ -238,7 +246,7 @@ impl FecDecoder {
     }
 
     /// Add a data packet to the FEC decoder
-    fn add_packet(&mut self, seq: u32, data: Bytes) {
+    fn add_packet(&mut self, _seq: u32, _data: Bytes) {
         // In a real implementation, we'd group packets into blocks
         // and store them for FEC recovery
 

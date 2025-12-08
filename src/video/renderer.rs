@@ -1,19 +1,14 @@
 use crate::video::decoder::{DecodedFrame, PixelFormat};
 use anyhow::{Context, Result};
 use wgpu::{
-    Adapter, Backends, Device, DeviceDescriptor, Features, Instance, Limits, PowerPreference,
-    Queue, RequestAdapterOptions, Surface, SurfaceConfiguration, TextureFormat, TextureUsages,
-    TextureView, util::DeviceExt,
+    Backends, Device, DeviceDescriptor, Features, Instance, Limits, PowerPreference, Queue,
+    RequestAdapterOptions, Surface, SurfaceConfiguration, TextureFormat, TextureUsages,
 };
-use winit::{
-    dpi::PhysicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::Window,
-};
+use winit::window::Window;
 
 /// GPU-accelerated video renderer using wgpu
 pub struct VideoRenderer<'a> {
+    #[allow(dead_code)]
     instance: Instance,
     surface: Surface<'a>,
     device: Device,
@@ -423,6 +418,6 @@ impl<'a> VideoRenderer<'a> {
 
     /// Get window reference
     pub fn window(&self) -> &Window {
-        &self.window
+        self.window
     }
 }

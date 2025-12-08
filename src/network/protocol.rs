@@ -116,15 +116,15 @@ impl Packet {
         }
 
         // Check for H.264 start code (00 00 00 01 or 00 00 01)
-        let has_start_code = (self.data.len() >= 4 && &self.data[0..4] == &[0, 0, 0, 1])
-            || (self.data.len() >= 3 && &self.data[0..3] == &[0, 0, 1]);
+        let has_start_code = (self.data.len() >= 4 && self.data[0..4] == [0, 0, 0, 1])
+            || (self.data.len() >= 3 && self.data[0..3] == [0, 0, 1]);
 
         if !has_start_code {
             return false;
         }
 
         // Find NAL unit header
-        let nal_start = if &self.data[0..4] == &[0, 0, 0, 1] {
+        let nal_start = if self.data[0..4] == [0, 0, 0, 1] {
             4
         } else {
             3

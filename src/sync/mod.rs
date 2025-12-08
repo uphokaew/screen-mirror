@@ -1,6 +1,6 @@
 /// Audio/Video synchronization engine using PTS
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Timestamped video frame
 pub struct TimestampedFrame {
@@ -44,6 +44,7 @@ pub struct SyncEngine {
     max_audio_buffer: usize,
     video_drift_ms: i64,
     audio_drift_ms: i64,
+    #[allow(dead_code)]
     last_sync_check: Instant,
     stats: SyncStats,
 }

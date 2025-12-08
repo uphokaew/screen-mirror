@@ -5,8 +5,9 @@ pub mod audio;
 /// mirroring from Android to PC with support for both wired (USB/TCP) and
 /// wireless (WiFi/QUIC) connections.
 pub mod config;
-pub mod control;
+
 pub mod network;
+pub mod server;
 pub mod sync;
 pub mod ui;
 pub mod video;

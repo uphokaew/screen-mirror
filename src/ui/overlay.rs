@@ -52,11 +52,10 @@ impl StatsOverlay {
     pub fn render(
         &mut self,
         _ctx: &egui::Context,
-        network_stats: &NetworkStats,
-        sync_stats: &SyncStats,
+        _network_stats: &NetworkStats,
+        _sync_stats: &SyncStats,
     ) {
         if !self.visible {
-            return;
         }
 
         // Full implementation would render:

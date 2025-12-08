@@ -41,6 +41,9 @@ pub struct VideoConfig {
     /// Target resolution (upscaling will be applied if monitor is larger)
     pub resolution: Resolution,
 
+    /// Max video size (0 for native)
+    pub max_size: u16, // Added max_size
+
     /// Video codec
     pub codec: VideoCodec,
 
@@ -136,6 +139,7 @@ impl Default for Config {
             },
             video: VideoConfig {
                 resolution: Resolution::FHD1080,
+                max_size: 0, // Default to native
                 codec: VideoCodec::H264,
                 bitrate: 8,
                 hw_accel: true,

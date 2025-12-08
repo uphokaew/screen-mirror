@@ -1,8 +1,8 @@
 use crate::audio::decoder::DecodedAudio;
 use anyhow::{Context, Result};
 use cpal::{
+    Device, SampleRate, Stream, StreamConfig,
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, Sample, SampleFormat, SampleRate, Stream, StreamConfig,
 };
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -18,10 +18,13 @@ pub struct AudioPlayer {
 /// Jitter buffer for handling packet reordering and timing jitter
 struct JitterBuffer {
     buffer: VecDeque<DecodedAudio>,
+    #[allow(dead_code)]
     max_size_ms: u32,
     current_size_samples: usize,
     max_size_samples: usize,
+    #[allow(dead_code)]
     sample_rate: u32,
+    #[allow(dead_code)]
     channels: u16,
 }
 

@@ -1,7 +1,7 @@
 use anyhow::{Context as AnyhowContext, Result};
 use bytes::Bytes;
-use ffmpeg::codec::decoder::Audio as AudioDecoder;
 use ffmpeg::codec::Context;
+use ffmpeg::codec::decoder::Audio as AudioDecoder;
 use ffmpeg::util::frame::audio::Audio as AudioFrame;
 use ffmpeg_next as ffmpeg;
 
@@ -16,7 +16,9 @@ pub struct DecodedAudio {
 /// Hardware-accelerated audio decoder for AAC/Opus streams
 pub struct HardwareAudioDecoder {
     decoder: AudioDecoder,
+    #[allow(dead_code)]
     sample_rate: u32,
+    #[allow(dead_code)]
     channels: u16,
     packet_buffer: Vec<u8>,
 }
@@ -33,11 +35,11 @@ impl HardwareAudioDecoder {
         ffmpeg::init().context("Failed to initialize FFmpeg")?;
 
         // Find audio decoder
-        let codec = ffmpeg::codec::decoder::find_by_name(codec_name)
+        let _codec = ffmpeg::codec::decoder::find_by_name(codec_name)
             .ok_or_else(|| anyhow::anyhow!("Audio codec '{}' not found", codec_name))?;
 
         let context = Context::new();
-        let mut decoder = context
+        let decoder = context
             .decoder()
             .audio()
             .context("Failed to create audio decoder")?;
@@ -96,7 +98,7 @@ impl HardwareAudioDecoder {
     fn convert_frame(&self, frame: &AudioFrame, pts: i64) -> Result<DecodedAudio> {
         let sample_count = frame.samples();
         let channels = frame.channels() as usize;
-        let format = frame.format();
+        let _format = frame.format();
 
         // Convert to f32 samples
         let samples = self.extract_samples(frame, sample_count, channels)?;
@@ -195,7 +197,7 @@ mod tests {
     #[test]
     fn test_audio_decoder_creation() {
         // Test that audio decoder can be created
-        let result = HardwareAudioDecoder::new("aac", 48000, 2);
+        let _result = HardwareAudioDecoder::new("aac", 48000, 2);
         // May fail if ffmpeg not installed, but structure should compile
     }
 }

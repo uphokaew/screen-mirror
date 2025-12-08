@@ -2,6 +2,7 @@ use anyhow::{Context as AnyhowContext, Result};
 use bytes::Bytes;
 use ffmpeg::codec::Context;
 use ffmpeg::codec::decoder::Video as VideoDecoder;
+use ffmpeg::codec::parameters::Parameters;
 use ffmpeg::format::Pixel;
 use ffmpeg::software::scaling::{context::Context as ScalingContext, flag::Flags};
 use ffmpeg::util::frame::video::Video as VideoFrame;
@@ -54,6 +55,7 @@ impl DecodedFrame {
 pub struct HardwareVideoDecoder {
     decoder: VideoDecoder,
     scaler: Option<ScalingContext>,
+    #[allow(dead_code)]
     frame_queue: VecDeque<DecodedFrame>,
     output_format: PixelFormat,
     packet_buffer: Vec<u8>,
@@ -106,18 +108,27 @@ impl HardwareVideoDecoder {
                     .or_else(|_| Self::try_hw_decoder(&["h264_vaapi", "hevc_vaapi"]))
                     .or_else(|_| Self::create_software_decoder())
             }
-            "none" | _ => {
+            _ => {
                 // Use software decoder
                 Self::create_software_decoder()
             }
         }
     }
 
+    /// Create a context with the specified codec
+    fn create_context(codec: &ffmpeg::Codec) -> Result<Context> {
+        let mut params = Parameters::new();
+        unsafe {
+            (*params.as_mut_ptr()).codec_id = codec.id().into();
+        }
+        Ok(Context::from_parameters(params)?)
+    }
+
     /// Try to create a hardware decoder
     fn try_hw_decoder(codec_names: &[&str]) -> Result<VideoDecoder> {
         for codec_name in codec_names {
             if let Some(codec) = ffmpeg::codec::decoder::find_by_name(codec_name) {
-                let context = Context::new();
+                let context = Self::create_context(&codec)?;
                 if let Ok(decoder) = context.decoder().video() {
                     tracing::info!("Using hardware decoder: {}", codec_name);
                     return Ok(decoder);
@@ -131,7 +142,7 @@ impl HardwareVideoDecoder {
     fn create_software_decoder() -> Result<VideoDecoder> {
         // Try H.264 first, then H.265
         if let Some(codec) = ffmpeg::codec::decoder::find_by_name("h264") {
-            let context = Context::new();
+            let context = Self::create_context(&codec)?;
             if let Ok(decoder) = context.decoder().video() {
                 tracing::info!("Using software H.264 decoder");
                 return Ok(decoder);
@@ -139,7 +150,7 @@ impl HardwareVideoDecoder {
         }
 
         if let Some(codec) = ffmpeg::codec::decoder::find_by_name("hevc") {
-            let context = Context::new();
+            let context = Self::create_context(&codec)?;
             if let Ok(decoder) = context.decoder().video() {
                 tracing::info!("Using software H.265 decoder");
                 return Ok(decoder);

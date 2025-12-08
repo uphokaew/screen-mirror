@@ -1,8 +1,8 @@
 use super::{Connection, ControlMessage, NetworkError, NetworkStats, Packet, PacketType, Result};
 use async_trait::async_trait;
-use bytes::{Bytes, BytesMut};
+// use bytes::BytesMut;
 use std::net::SocketAddr;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -11,14 +11,9 @@ use tokio::time::timeout;
 pub struct TcpConnection {
     stream: TcpStream,
     stats: NetworkStats,
-    last_rtt_check: Instant,
-    recv_buffer: BytesMut,
 }
 
 impl TcpConnection {
-    /// Buffer size for receiving data (1MB for low latency)
-    const RECV_BUFFER_SIZE: usize = 1024 * 1024;
-
     /// Timeout for connection attempts
     const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -38,8 +33,6 @@ impl TcpConnection {
         Ok(Self {
             stream,
             stats: NetworkStats::default(),
-            last_rtt_check: Instant::now(),
-            recv_buffer: BytesMut::with_capacity(Self::RECV_BUFFER_SIZE),
         })
     }
 
@@ -57,74 +50,73 @@ impl TcpConnection {
             })
             .map(|_| ())
     }
-
-    /// Measure RTT by sending a ping control message
-    async fn measure_rtt(&mut self) -> Result<()> {
-        // Only measure every second to avoid overhead
-        if self.last_rtt_check.elapsed() < Duration::from_secs(1) {
-            return Ok(());
-        }
-
-        let start = Instant::now();
-
-        // Send a control message (in real implementation, we'd wait for ACK)
-        let msg = ControlMessage::Ack { seq: 0 };
-        let data = msg
-            .to_bytes()
-            .map_err(|e| NetworkError::Protocol(e.to_string()))?;
-
-        let packet = Packet::new(PacketType::Control, 0, 0, data);
-
-        self.stream.write_all(&packet.to_bytes()).await?;
-
-        // Estimate RTT (simplified - real implementation would wait for server ACK)
-        self.stats.rtt_ms = start.elapsed().as_secs_f64() * 1000.0;
-        self.last_rtt_check = Instant::now();
-
-        Ok(())
-    }
 }
 
 #[async_trait]
 impl Connection for TcpConnection {
     async fn connect(addr: SocketAddr) -> Result<Self> {
-        Self::new(addr).await
+        let mut connection = Self::new(addr).await?;
+
+        // Handshake: Read device name (64 bytes)
+        let mut device_name = [0u8; 64];
+        connection.read_exact(&mut device_name).await?;
+        let name = String::from_utf8_lossy(&device_name);
+        tracing::info!("Connected to device: {}", name.trim_matches(char::from(0)));
+
+        // Consume 1 dummy byte? (Observed 0x00 before CodecID)
+        let mut dummy = [0u8; 1];
+        connection.read_exact(&mut dummy).await?;
+        tracing::info!("Consuming dummy byte: 0x{:02X}", dummy[0]);
+
+        // Scrcpy Video Stream Header: CodecID (4) + Width (4) + Height (4) = 12 bytes
+        let mut meta = [0u8; 12];
+        connection.read_exact(&mut meta).await?;
+        let codec_id = u32::from_be_bytes(meta[0..4].try_into().unwrap());
+        let width = u32::from_be_bytes(meta[4..8].try_into().unwrap());
+        let height = u32::from_be_bytes(meta[8..12].try_into().unwrap());
+        tracing::info!(
+            "Video Stream Metadata: CodecID=0x{:08X}, Width={}, Height={}",
+            codec_id,
+            width,
+            height
+        );
+
+        Ok(connection)
     }
 
     async fn recv(&mut self) -> Result<Packet> {
-        // Read packet header (17 bytes)
-        let mut header = [0u8; Packet::HEADER_SIZE];
+        // Scrcpy Protocol:
+        // [8 bytes PTS] [4 bytes LEN] [LEN bytes DATA]
+        // All big-endian
+
+        let mut header = [0u8; 12];
         self.read_exact(&mut header).await?;
 
-        // Parse length from header (last 4 bytes)
-        let len = u32::from_le_bytes([header[13], header[14], header[15], header[16]]) as usize;
+        let pts = u64::from_be_bytes(header[0..8].try_into().unwrap()) as i64;
+        let len = u32::from_be_bytes(header[8..12].try_into().unwrap()) as usize;
 
-        // Validate packet size (max 10MB for safety)
-        if len > 10 * 1024 * 1024 {
-            return Err(NetworkError::Protocol("Packet too large".to_string()));
+        // Validate packet size (max 20MB for safety - keyframes can be large)
+        if len > 20 * 1024 * 1024 {
+            return Err(NetworkError::Protocol(format!(
+                "Packet too large: {} bytes",
+                len
+            )));
         }
 
-        // Read payload
         let mut payload = vec![0u8; len];
         self.read_exact(&mut payload).await?;
 
-        // Combine header and payload
-        let mut full_packet = BytesMut::with_capacity(Packet::HEADER_SIZE + len);
-        full_packet.extend_from_slice(&header);
-        full_packet.extend_from_slice(&payload);
-
-        // Parse packet
-        let packet = Packet::from_bytes(full_packet.freeze())
-            .map_err(|e| NetworkError::Protocol(e.to_string()))?;
-
         // Update stats
-        self.stats.bytes_received += (Packet::HEADER_SIZE + len) as u64;
+        self.stats.bytes_received += (12 + len) as u64;
         self.stats.packets_received += 1;
 
-        // Periodically measure RTT
-        let _ = self.measure_rtt().await;
-
-        Ok(packet)
+        // Construct Video Packet
+        Ok(Packet::new(
+            PacketType::Video,
+            pts,
+            0,
+            bytes::Bytes::from(payload),
+        ))
     }
 
     async fn send_control(&mut self, msg: ControlMessage) -> Result<()> {
@@ -153,6 +145,7 @@ impl Connection for TcpConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytes::Bytes;
 
     #[test]
     fn test_packet_serialization() {

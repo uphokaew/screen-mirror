@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use bytes::{Bytes, BytesMut};
 use std::net::SocketAddr;
 use thiserror::Error;
 
@@ -94,6 +93,6 @@ impl NetworkStats {
     pub fn quality_score(&self) -> f64 {
         let rtt_score = (1.0 - (self.rtt_ms / 500.0).min(1.0)).max(0.0);
         let loss_score = (1.0 - (self.packet_loss / 5.0).min(1.0)).max(0.0);
-        (rtt_score * 0.6 + loss_score * 0.4)
+        rtt_score * 0.6 + loss_score * 0.4
     }
 }
