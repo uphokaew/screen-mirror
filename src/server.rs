@@ -1,6 +1,6 @@
 use super::config::Config;
+use crate::assets::Assets;
 use anyhow::{Context, Result};
-use std::path::Path;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -11,7 +11,8 @@ pub struct ServerManager;
 impl ServerManager {
     pub async fn new() -> Result<Self> {
         // Verify ADB is accessible
-        let status = Command::new("adb")
+        let adb_path = Assets::get_adb_path()?;
+        let status = Command::new(&adb_path)
             .arg("start-server")
             .status()
             .await
@@ -27,7 +28,8 @@ impl ServerManager {
         let serial = serial.map(|s| s.to_string());
 
         // 1. Check devices
-        let output = Command::new("adb")
+        let adb_path = Assets::get_adb_path()?;
+        let output = Command::new(&adb_path)
             .args(["devices"])
             .output()
             .await
@@ -43,59 +45,55 @@ impl ServerManager {
         // 2. Determine Target Serial and ensure connection
         let mut target_serial = serial.clone();
 
-        if let Some(s) = &serial
-            && !output_str.contains(s)
-        {
-            info!("Device {} not found in ADB. Attempting to connect...", s);
-            // Try connect if IP
-            if s.contains('.') {
-                let _ = Command::new("adb").args(["connect", s]).status().await;
-                // Re-check
-                let check_output = Command::new("adb").arg("devices").output().await?;
-                let check_str = String::from_utf8_lossy(&check_output.stdout);
-                if !check_str.contains(s) {
-                    // Fallback check: If exactly one device exists (e.g. USB), use it
-                    let lines: Vec<&str> = check_str
-                        .lines()
-                        .filter(|l| l.contains("\tdevice"))
-                        .collect();
-                    if lines.len() == 1 {
-                        let fallback = lines[0].split('\t').next().unwrap_or("").to_string();
-                        if !fallback.is_empty() {
+        if let Some(s) = &serial {
+            if !output_str.contains(s) {
+                info!("Device {} not found in ADB. Attempting to connect...", s);
+                // Try connect if IP
+                if s.contains('.') {
+                    let _ = Command::new(&adb_path).args(["connect", s]).status().await;
+                    // Re-check
+                    let check_output = Command::new(&adb_path).arg("devices").output().await?;
+                    let check_str = String::from_utf8_lossy(&check_output.stdout);
+                    if !check_str.contains(s) {
+                        // Fallback check: If exactly one device exists (e.g. USB), use it
+                        let lines: Vec<&str> = check_str
+                            .lines()
+                            .filter(|l| l.contains("\tdevice"))
+                            .collect();
+                        if lines.len() == 1 {
+                            let fallback = lines[0].split('\t').next().unwrap_or("").to_string();
+                            if !fallback.is_empty() {
+                                warn!(
+                                    "Target {} not reachable. Falling back to connected device: {}",
+                                    s, fallback
+                                );
+                                target_serial = Some(fallback);
+                            }
+                        } else {
                             warn!(
-                                "Target {} not reachable. Falling back to connected device: {}",
-                                s, fallback
+                                "Target {} not found and multiple/no other devices available.",
+                                s
                             );
-                            target_serial = Some(fallback);
                         }
-                    } else {
-                        warn!(
-                            "Target {} not found and multiple/no other devices available.",
-                            s
-                        );
                     }
                 }
             }
         }
 
         // 3. Push scrcpy-server.jar
-        let jar_name = "scrcpy-server";
-        let jar_paths = [jar_name.to_string(), "scrcpy-server".to_string()];
+        let local_jar = Assets::get_server_path()?;
 
-        let local_jar = jar_paths
-            .iter()
-            .find(|p| Path::new(p).exists())
-            .context("scrcpy-server not found! Please place it in the application folder.")?;
+        info!("Pushing {:?} to device...", local_jar);
 
-        info!("Pushing {} to device...", local_jar);
-
-        let mut push_cmd = Command::new("adb");
+        let mut push_cmd = Command::new(&adb_path);
         if let Some(s) = &target_serial {
             push_cmd.args(["-s", s]);
         }
 
         let status = push_cmd
-            .args(["push", local_jar, "/data/local/tmp/scrcpy-server"])
+            .arg("push")
+            .arg(local_jar)
+            .arg("/data/local/tmp/scrcpy-server")
             .status()
             .await
             .context("Failed to push server jar")?;
@@ -106,7 +104,7 @@ impl ServerManager {
 
         // 4. Setup port forwarding (Forward PC port 5555 to Device socket)
         info!("Setting up port forwarding...");
-        let mut forward_cmd = Command::new("adb");
+        let mut forward_cmd = Command::new(&adb_path);
         if let Some(s) = &target_serial {
             forward_cmd.args(["-s", s]);
         }
@@ -149,7 +147,10 @@ impl ServerManager {
         let serial_clone = target_serial.clone();
 
         tokio::spawn(async move {
-            let mut server_cmd = Command::new("adb");
+            let mut server_cmd = match Assets::get_adb_path() {
+                Ok(p) => Command::new(p),
+                Err(_) => Command::new("adb"), // Fallback unlikely to work if get_adb_path failed before
+            };
             if let Some(s) = &serial_clone {
                 server_cmd.args(["-s", s]);
             }

@@ -5,21 +5,28 @@ use scrcpy_custom::{
     audio::{decoder::HardwareAudioDecoder, player::AudioPlayer},
     config::{Config, ConnectionMode},
     network::*,
+    platform,
     video::{
         decoder::{DecodedFrame, HardwareVideoDecoder, PixelFormat},
         renderer::VideoRenderer,
     },
 };
-use std::net::{IpAddr, SocketAddr};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, mpsc};
-use std::thread;
-use tracing::{error, info, warn};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
     window::Window,
 };
+
+use std::net::{IpAddr, SocketAddr};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
+use std::thread;
+use tracing::{error, info, warn};
+
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 /// Ultra-low latency screen mirroring application
 #[derive(Parser, Debug, Clone)]
@@ -75,17 +82,41 @@ impl From<ConnectionModeArg> for ConnectionMode {
 }
 
 fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    // Initialize platform specific components
+    platform::init_platform();
+
+    // Initialize Logging & UI
+    // Note: We are using a custom Logger instead of standard tracing init for stdout
+    let logger = scrcpy_custom::ui::Logger::init();
+
+    info!("Starting scrcpy-custom");
 
     // Interactive Mode Selection if no arguments provided
     // This allows the user to choose between Wired (USB) and Wireless without typing commands
     let mut args = Args::parse();
+
+    // --- DEMO SNIPPET START ---
+    // Simulating connection phase as requested
+    if std::env::var("DEMO_MODE").is_ok() {
+        let mut attempt = 1;
+        loop {
+            logger.start_spinner(&format!("Connecting to device (Attempt {})...", attempt));
+
+            // Simulating work
+            thread::sleep(std::time::Duration::from_millis(800));
+
+            if attempt < 3 {
+                warn!("Connection attempt {} failed. Retrying...", attempt);
+                // In real app, we might wait here
+                thread::sleep(std::time::Duration::from_millis(500));
+                attempt += 1;
+            } else {
+                logger.success("Connected successfully!");
+                break;
+            }
+        }
+    }
+    // --- DEMO SNIPPET END ---
 
     if std::env::args().len() <= 1 {
         println!("========================================");
@@ -101,7 +132,7 @@ fn main() -> Result<()> {
             match input.trim() {
                 "2" => {
                     args.mode = ConnectionModeArg::Tcp; // Currently both use TCP, but this might imply IP input later
-                    // Ideally for wireless we might want to ask for IP
+                                                        // Ideally for wireless we might want to ask for IP
                     println!("Enter Device IP (e.g. 192.168.1.100): ");
                     let mut ip_input = String::new();
                     if std::io::stdin().read_line(&mut ip_input).is_ok() {
@@ -145,8 +176,8 @@ fn main() -> Result<()> {
     let (frame_tx, frame_rx) = mpsc::channel::<DecodedFrame>();
 
     // Shutdown signal
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
     let running = Arc::new(AtomicBool::new(true));
     let running_clone = running.clone();
 

@@ -1,11 +1,11 @@
-use anyhow::{Context as AnyhowContext, Result};
+use anyhow::{anyhow, Result};
+use audiopus::{coder::Decoder as OpusDecoder, Channels, SampleRate as OpusSampleRate};
 use bytes::Bytes;
-use ffmpeg::codec::Context;
-use ffmpeg::codec::decoder::Audio as AudioDecoder;
-use ffmpeg::util::frame::audio::Audio as AudioFrame;
-use ffmpeg_next as ffmpeg;
+use symphonia::core::audio::AudioBufferRef;
+use symphonia::core::codecs::{Decoder as SymphoniaDecoder, DecoderOptions, CODEC_TYPE_NULL};
 
 /// Decoded audio samples with metadata
+#[derive(Debug, Clone)]
 pub struct DecodedAudio {
     pub pts: i64,
     pub samples: Vec<f32>,
@@ -13,191 +13,188 @@ pub struct DecodedAudio {
     pub channels: u16,
 }
 
-/// Hardware-accelerated audio decoder for AAC/Opus streams
+pub enum AudioBackend {
+    Opus(OpusWrapper),
+    Symphonia(SymphoniaWrapper),
+}
+
+/// Smart Audio Decoder that selects the best backend
 pub struct HardwareAudioDecoder {
-    decoder: AudioDecoder,
-    #[allow(dead_code)]
-    sample_rate: u32,
-    #[allow(dead_code)]
-    channels: u16,
-    packet_buffer: Vec<u8>,
+    backend: AudioBackend,
+    _sample_rate: u32,
+    _channels: u16,
 }
 
 impl HardwareAudioDecoder {
-    /// Create a new audio decoder
-    ///
-    /// # Arguments
-    /// * `codec_name` - Codec name: "aac", "opus", "mp3"
-    /// * `sample_rate` - Expected sample rate (e.g., 48000)
-    /// * `channels` - Number of channels (e.g., 2 for stereo)
     pub fn new(codec_name: &str, sample_rate: u32, channels: u16) -> Result<Self> {
-        // Initialize FFmpeg
-        ffmpeg::init().context("Failed to initialize FFmpeg")?;
+        let backend = match codec_name.to_lowercase().as_str() {
+            "opus" => {
+                tracing::info!("Initializing specialized Opus decoder");
+                AudioBackend::Opus(OpusWrapper::new(sample_rate, channels)?)
+            }
+            "aac" | "mp3" | "flac" | "wav" => {
+                tracing::info!("Initializing Symphonia decoder for {}", codec_name);
+                AudioBackend::Symphonia(SymphoniaWrapper::new(codec_name, sample_rate, channels)?)
+            }
+            _ => return Err(anyhow!("Unsupported codec: {}", codec_name)),
+        };
 
-        // Find audio decoder
-        let _codec = ffmpeg::codec::decoder::find_by_name(codec_name)
-            .ok_or_else(|| anyhow::anyhow!("Audio codec '{}' not found", codec_name))?;
+        Ok(Self {
+            backend,
+            _sample_rate: sample_rate,
+            _channels: channels,
+        })
+    }
 
-        let context = Context::new();
-        let decoder = context
-            .decoder()
-            .audio()
-            .context("Failed to create audio decoder")?;
+    pub fn decode(&mut self, data: &Bytes, pts: i64) -> Result<Option<DecodedAudio>> {
+        match &mut self.backend {
+            AudioBackend::Opus(decoder) => decoder.decode(data, pts),
+            AudioBackend::Symphonia(decoder) => decoder.decode(data, pts),
+        }
+    }
+}
 
-        tracing::info!("Using audio decoder: {}", codec_name);
+pub struct OpusWrapper {
+    decoder: OpusDecoder,
+    channels: audiopus::Channels,
+    sample_rate: u32,
+}
+
+impl OpusWrapper {
+    pub fn new(sample_rate: u32, channels: u16) -> Result<Self> {
+        let opus_channels = match channels {
+            1 => Channels::Mono,
+            2 => Channels::Stereo,
+            _ => return Err(anyhow!("Opus only supports 1 or 2 channels")),
+        };
+
+        let opus_rate = match sample_rate {
+            48000 => OpusSampleRate::Hz48000,
+            24000 => OpusSampleRate::Hz24000,
+            16000 => OpusSampleRate::Hz16000,
+            12000 => OpusSampleRate::Hz12000,
+            8000 => OpusSampleRate::Hz8000,
+            _ => return Err(anyhow!("Unsupported Opus sample rate: {}", sample_rate)),
+        };
+
+        let decoder = OpusDecoder::new(opus_rate, opus_channels)?;
+
+        Ok(Self {
+            decoder,
+            channels: opus_channels,
+            sample_rate,
+        })
+    }
+
+    pub fn decode(&mut self, data: &Bytes, pts: i64) -> Result<Option<DecodedAudio>> {
+        let mut out = vec![0.0f32; 5760 * self.channels as usize];
+        let input: &[u8] = data;
+        match self.decoder.decode_float(Some(input), &mut out, false) {
+            Ok(samples_decoded) => {
+                out.truncate(samples_decoded * self.channels as usize);
+                Ok(Some(DecodedAudio {
+                    pts,
+                    samples: out,
+                    sample_rate: self.sample_rate,
+                    channels: self.channels as u16,
+                }))
+            }
+            Err(e) => Err(anyhow!("Opus decode error: {:?}", e)),
+        }
+    }
+}
+
+pub struct SymphoniaWrapper {
+    decoder: Box<dyn SymphoniaDecoder>,
+    sample_rate: u32,
+    channels: u16,
+}
+
+impl SymphoniaWrapper {
+    pub fn new(codec_name: &str, sample_rate: u32, channels: u16) -> Result<Self> {
+        let codec_registry = symphonia::default::get_codecs();
+
+        let hint = match codec_name {
+            "aac" => symphonia::core::codecs::CODEC_TYPE_AAC,
+            "mp3" => symphonia::core::codecs::CODEC_TYPE_MP3,
+            "flac" => symphonia::core::codecs::CODEC_TYPE_FLAC,
+            "pcm" | "raw" => symphonia::core::codecs::CODEC_TYPE_PCM_S16LE,
+            _ => CODEC_TYPE_NULL,
+        };
+
+        if hint == CODEC_TYPE_NULL {
+            return Err(anyhow!("Unknown codec for Symphonia: {}", codec_name));
+        }
+
+        let _codec = codec_registry
+            .get_codec(hint)
+            .ok_or_else(|| anyhow!("Codec not found in Symphonia registry"))?;
+
+        let decoder = codec_registry.make(
+            &symphonia::core::codecs::CodecParameters {
+                codec: hint,
+                sample_rate: Some(sample_rate),
+                ..Default::default()
+            },
+            &DecoderOptions::default(),
+        )?;
 
         Ok(Self {
             decoder,
             sample_rate,
             channels,
-            packet_buffer: Vec::new(),
         })
     }
 
-    /// Decode an audio packet
-    ///
-    /// # Arguments
-    /// * `data` - Encoded audio data (AAC/Opus/etc.)
-    /// * `pts` - Presentation timestamp in microseconds
-    ///
-    /// # Returns
-    /// Decoded audio samples if a complete frame was produced, None otherwise
     pub fn decode(&mut self, data: &Bytes, pts: i64) -> Result<Option<DecodedAudio>> {
-        // Append data to packet buffer
-        self.packet_buffer.extend_from_slice(data);
+        let packet = symphonia::core::formats::Packet::new_from_slice(0, 0, 0, data);
 
-        // Create packet from buffer
-        let mut packet = ffmpeg::codec::packet::Packet::copy(&self.packet_buffer);
-        packet.set_pts(Some(pts));
-
-        // Send packet to decoder
-        self.decoder
-            .send_packet(&packet)
-            .context("Failed to send packet to audio decoder")?;
-
-        // Clear packet buffer after successful send
-        self.packet_buffer.clear();
-
-        // Try to receive decoded frame
-        let mut frame = AudioFrame::empty();
-        match self.decoder.receive_frame(&mut frame) {
-            Ok(_) => {
-                // Frame decoded successfully
-                let decoded = self.convert_frame(&frame, pts)?;
-                Ok(Some(decoded))
+        match self.decoder.decode(&packet) {
+            Ok(decoded) => {
+                let samples = Self::convert_buffer(&decoded);
+                Ok(Some(DecodedAudio {
+                    pts,
+                    samples,
+                    sample_rate: self.sample_rate,
+                    channels: self.channels,
+                }))
             }
-            Err(ffmpeg::Error::Other { errno: 11 }) => {
-                // EAGAIN - need more data
-                Ok(None)
-            }
-            Err(e) => Err(anyhow::anyhow!("Audio decoder error: {:?}", e)),
+            Err(e) => Err(anyhow!("Symphonia decode error: {}", e)),
         }
     }
 
-    /// Convert FFmpeg audio frame to our DecodedAudio format
-    fn convert_frame(&self, frame: &AudioFrame, pts: i64) -> Result<DecodedAudio> {
-        let sample_count = frame.samples();
-        let channels = frame.channels() as usize;
-        let _format = frame.format();
+    fn convert_buffer(decoded: &AudioBufferRef) -> Vec<f32> {
+        use symphonia::core::audio::Signal;
+        use symphonia::core::conv::FromSample;
 
-        // Convert to f32 samples
-        let samples = self.extract_samples(frame, sample_count, channels)?;
+        let mut samples = Vec::new();
 
-        Ok(DecodedAudio {
-            pts,
-            samples,
-            sample_rate: frame.rate(),
-            channels: channels as u16,
-        })
-    }
-
-    /// Extract audio samples from frame and convert to f32
-    fn extract_samples(
-        &self,
-        frame: &AudioFrame,
-        sample_count: usize,
-        channels: usize,
-    ) -> Result<Vec<f32>> {
-        let total_samples = sample_count * channels;
-        let mut samples = Vec::with_capacity(total_samples);
-
-        // Get frame format
-        let format = frame.format();
-
-        // Extract samples based on format
-        match format {
-            ffmpeg::format::Sample::F32(ffmpeg::format::sample::Type::Packed) => {
-                // Already f32, packed format
-                let data = frame.data(0);
-                for i in 0..total_samples {
-                    let offset = i * 4;
-                    if offset + 4 <= data.len() {
-                        let sample_bytes = [
-                            data[offset],
-                            data[offset + 1],
-                            data[offset + 2],
-                            data[offset + 3],
-                        ];
-                        samples.push(f32::from_le_bytes(sample_bytes));
+        match decoded {
+            symphonia::core::audio::AudioBufferRef::F32(buf) => {
+                for i in 0..buf.frames() {
+                    for c in 0..buf.spec().channels.count() {
+                        samples.push(buf.chan(c)[i]);
                     }
                 }
             }
-            ffmpeg::format::Sample::I16(ffmpeg::format::sample::Type::Packed) => {
-                // i16 format, convert to f32
-                let data = frame.data(0);
-                for i in 0..total_samples {
-                    let offset = i * 2;
-                    if offset + 2 <= data.len() {
-                        let sample_i16 = i16::from_le_bytes([data[offset], data[offset + 1]]);
-                        let sample_f32 = sample_i16 as f32 / 32768.0;
-                        samples.push(sample_f32);
+            symphonia::core::audio::AudioBufferRef::S16(buf) => {
+                for i in 0..buf.frames() {
+                    for c in 0..buf.spec().channels.count() {
+                        samples.push(f32::from_sample(buf.chan(c)[i]));
                     }
                 }
             }
-            _ => {
-                // Unsupported format, return silence
-                tracing::warn!("Unsupported audio format: {:?}", format);
-                samples.resize(total_samples, 0.0);
+            symphonia::core::audio::AudioBufferRef::U8(buf) => {
+                for i in 0..buf.frames() {
+                    for c in 0..buf.spec().channels.count() {
+                        samples.push(f32::from_sample(buf.chan(c)[i]));
+                    }
+                }
             }
+            _ => tracing::warn!("Unsupported sample format from Symphonia"),
         }
-
-        Ok(samples)
-    }
-
-    /// Flush the decoder and get any remaining frames
-    pub fn flush(&mut self) -> Result<Vec<DecodedAudio>> {
-        let mut frames = Vec::new();
-
-        // Send flush signal
-        self.decoder
-            .send_eof()
-            .context("Failed to send EOF to audio decoder")?;
-
-        // Receive all remaining frames
-        loop {
-            let mut frame = AudioFrame::empty();
-            match self.decoder.receive_frame(&mut frame) {
-                Ok(_) => {
-                    if let Ok(decoded) = self.convert_frame(&frame, 0) {
-                        frames.push(decoded);
-                    }
-                }
-                Err(_) => break,
-            }
-        }
-
-        Ok(frames)
+        samples
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_audio_decoder_creation() {
-        // Test that audio decoder can be created
-        let _result = HardwareAudioDecoder::new("aac", 48000, 2);
-        // May fail if ffmpeg not installed, but structure should compile
-    }
-}
+use symphonia;

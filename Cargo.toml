@@ -1,73 +1,78 @@
 [package]
 name = "scrcpy-custom"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 authors = ["scrcpy-custom contributors"]
 description = "Ultra-low latency screen mirroring application"
 license = "MIT"
 
-# ==========================================
-# Common Dependencies (All Platforms)
-# ==========================================
 [dependencies]
-# Networking
-tokio = { version = "1.35", features = ["full", "rt-multi-thread"] }
+# --- High Performance Allocator ---
+mimalloc = { version = "0.1", default-features = false }
+
+# --- Networking ---
+tokio = { version = "1.35", features = [
+	"full",
+	"rt-multi-thread",
+	"parking_lot",
+] }
+
 futures = "0.3"
 async-trait = "0.1"
-quinn = "0.11.9"
-rcgen = "0.14.5"
-
-
-# Use ring provider for rustls to avoid cmake/nasm requirements (Windows friendly)
-rustls = { version = "0.23.35", default-features = false, features = [
+quinn = "0.11"
+rcgen = "0.14"
+rustls = { version = "0.23", default-features = false, features = [
 	"logging",
 	"std",
 	"tls12",
 	"ring",
 ] }
 
-# Video & Audio (Common config, logic implemented in platform sections if needed)
-# GPU Rendering
-wgpu = "22.1.0"
+# --- Graphics & Video ---
 winit = { version = "0.30.5", features = ["rwh_06", "x11", "wayland"] }
+wgpu = "22.1"
 pollster = "0.3"
+raw-window-handle = "0.6"
+bytemuck = { version = "1.14", features = ["derive"] }
 
-# GUI Overlay
-egui = "0.33.2"
-egui-wgpu = "0.33.2"
-egui-winit = "0.33.2"
+# --- Audio Decoding ---
+audiopus = "0.2"
+symphonia = { version = "0.5.3", features = ["all"] }
+rb = "0.4"
 
-# Audio Playback
-cpal = "0.16.0"
+# --- GUI Overlay ---
+egui = "0.30"
+egui-wgpu = "0.30"
+egui-winit = "0.30"
 
-# Serialization & Protocol
+# --- Audio ---
+cpal = "0.16"
+# rubato = "0.14" 
+
+# --- Serialization & Utils ---
 serde = { version = "1.0", features = ["derive"] }
 bincode = "1.3"
 bytes = "1.5"
-
-# Error Handling
 anyhow = "1.0"
-thiserror = "2.0.17"
-
-# Utilities
+thiserror = "2.0"
 crossbeam = "0.8"
 parking_lot = "0.12"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-
-# CLI
-clap = { version = "4.4", features = ["derive"] }
-
-# Reed-Solomon for FEC
 reed-solomon-erasure = "6.0"
 
+# --- Logging & Profiling ---
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+indicatif = "0.17"
+console = "0.15"
+# tracing-tracy = "0.10" 
+
+clap = { version = "4.4", features = ["derive"] }
+
 # ==========================================
-# Windows Specific Dependencies
+# Windows Specific
 # ==========================================
 [target.'cfg(target_os = "windows")'.dependencies]
-# On Windows, we use dynamic linking with pre-installed FFmpeg (C:\ffmpeg)
-# We disable default features to avoid bindgen trying to generate bindings (requires libclang)
-# Reverting to 6.1 as 7.1/8.0 are incompatible with installed FFmpeg headers
 ffmpeg-next = { version = "6.1", default-features = false, features = [
 	"codec",
 	"format",
@@ -75,33 +80,22 @@ ffmpeg-next = { version = "6.1", default-features = false, features = [
 ] }
 
 # ==========================================
-# Linux Specific Dependencies
+# Linux Specific
 # ==========================================
 [target.'cfg(target_os = "linux")'.dependencies]
-# On Linux, standard build works fine (uses pkg-config)
 ffmpeg-next = "6.1"
 
 # ==========================================
-# Dev Dependencies
+# Build Profiles (Tuned for Speed)
 # ==========================================
-[dev-dependencies]
-mockall = "0.14.0"
-criterion = "0.8.0"
-
-[lib]
-name = "scrcpy_custom"
-path = "src/lib.rs"
-
-[[bin]]
-name = "scrcpy-custom"
-path = "src/main.rs"
-
 [profile.release]
 opt-level = 3
-lto = true
+lto = "fat"
 codegen-units = 1
-debug = false
+panic = "abort"
 strip = true
+debug = false
 
 [profile.dev]
-opt-level = 1 # Slightly optimize even in dev
+opt-level = 1
+debug = true

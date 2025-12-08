@@ -1,3 +1,4 @@
+pub mod assets;
 pub mod audio;
 /// Ultra-low latency screen mirroring application library
 ///
@@ -7,6 +8,7 @@ pub mod audio;
 pub mod config;
 
 pub mod network;
+pub mod platform;
 pub mod server;
 pub mod sync;
 pub mod ui;

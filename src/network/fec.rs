@@ -276,13 +276,13 @@ impl FecDecoder {
         // Extract recovered packets
         let mut recovered_packets = Vec::new();
         for (i, shard) in shards.iter().take(block.data_count as usize).enumerate() {
-            if block.data_shards[i].is_none()
-                && let Some(data) = shard
-            {
-                // Parse recovered packet
-                if let Ok(packet) = Packet::from_bytes(Bytes::from(data.clone())) {
-                    recovered_packets.push(packet);
-                    tracing::info!("Recovered packet {} in block {}", i, block_id);
+            if block.data_shards[i].is_none() {
+                if let Some(data) = shard {
+                    // Parse recovered packet
+                    if let Ok(packet) = Packet::from_bytes(Bytes::from(data.clone())) {
+                        recovered_packets.push(packet);
+                        tracing::info!("Recovered packet {} in block {}", i, block_id);
+                    }
                 }
             }
         }
