@@ -2,14 +2,7 @@
 
 A high-performance, Rust-based scrcpy client with custom UI, low-latency audio, and wireless hotspot support.
 
-**Select Language / เลือกภาษา**:
-- [🇺🇸 English Documentation](#english-documentation)
-- [🇹🇭 เอกสารภาษาไทย (Thai Documentation)](#เอกสารภาษาไทย-thai-documentation)
-
 ---
-
-<a name="english-documentation"></a>
-## 🇺🇸 English Documentation
 
 ### 1. Installation
 
@@ -82,9 +75,6 @@ Recommended for locations without WiFi routers or for lower latency than a busy 
 - **Connection Refused**: Check `adb devices`. Ensure `adb forward` command was run for USB mode.
 
 ---
-
-<a name="เอกสารภาษาไทย-thai-documentation"></a>
-## 🇹🇭 เอกสารภาษาไทย (Thai Documentation)
 
 ### 1. การติดตั้ง
 
